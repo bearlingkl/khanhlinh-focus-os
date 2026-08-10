@@ -345,6 +345,7 @@ function updateCloudSyncStatus(statusText) {
 document.addEventListener('DOMContentLoaded', () => {
   initClockAndMood();
   renderApp();
+  updateAccountBtn();
   autoFetchFromCloud();
 });
 
@@ -1105,6 +1106,38 @@ function renderWorkspaceTab() {
 
         <div class="flex justify-end pt-2 border-t border-slate-200">
           <button onclick="closeSyncModal()" class="btn-primary-blue text-xs">Done & Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: PERSONAL ACCOUNT & CLOUD PASSCODE -->
+    <div id="account-modal" class="modal-backdrop hidden">
+      <div class="modal-card-bright w-full max-w-md p-6 space-y-4">
+        <div class="flex justify-between items-center border-b border-sky-200 pb-3">
+          <h3 class="font-extrabold text-lg text-sky-800 flex items-center gap-2">
+            🔐 Personal Account & Cloud Passcode
+          </h3>
+          <button onclick="closeAccountModal()" class="text-sm font-bold opacity-60 hover:opacity-100">✕</button>
+        </div>
+
+        <div class="bg-sky-50 p-3 rounded-xl border border-sky-300 text-xs text-slate-900 font-bold space-y-1">
+          <div class="font-extrabold text-sm text-sky-900">💡 How Account Sync Works:</div>
+          <div>Create or enter a personal sync passcode (e.g. <b class="text-sky-900">khanhlinh</b>).</div>
+          <div class="text-[11px] opacity-80 font-normal">Use this exact same passcode on Chrome, Safari, iPhone & iPad to sync all your tasks live everywhere!</div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-sky-900 mb-1">🔑 Account / Sync Passcode:</label>
+          <input type="text" id="account-passcode-input" value="${localStorage.getItem('khanhlinh_sync_key') || 'khanhlinh'}" placeholder="e.g. khanhlinh" class="input-bright w-full font-bold text-slate-900 text-sm">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <button onclick="saveAccountLogin('push')" class="btn-primary-blue text-xs justify-center py-2.5">
+            ⬆️ Connect & Upload Data
+          </button>
+          <button onclick="saveAccountLogin('pull')" class="btn-emerald text-xs justify-center py-2.5">
+            ⬇️ Connect & Download Data
+          </button>
         </div>
       </div>
     </div>
@@ -2322,5 +2355,41 @@ function importJSONDataPrompt() {
     location.reload();
   } catch (err) {
     alert(`Import failed: Invalid JSON code (${err.message})`);
+  }
+}
+
+// PERSONAL ACCOUNT & CLOUD PASSCODE HELPERS
+function openAccountModal() {
+  const modal = document.getElementById('account-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeAccountModal() {
+  const modal = document.getElementById('account-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveAccountLogin(direction = 'pull') {
+  const val = document.getElementById('account-passcode-input').value.trim();
+  if (!val) { alert("Please enter a valid passcode (e.g. khanhlinh)!"); return; }
+
+  localStorage.setItem('khanhlinh_sync_key', val);
+  updateAccountBtn(val);
+  closeAccountModal();
+
+  if (direction === 'push') {
+    await autoPushToCloud();
+    alert(`🎉 Account '${val}' connected! Current tasks uploaded to Cloud.`);
+  } else {
+    await autoFetchFromCloud();
+    alert(`🎉 Account '${val}' connected! Latest tasks downloaded from Cloud.`);
+  }
+}
+
+function updateAccountBtn(val) {
+  const btn = document.getElementById('account-login-btn');
+  if (btn) {
+    const key = val || localStorage.getItem('khanhlinh_sync_key') || 'khanhlinh';
+    btn.innerHTML = `🔐 Account: ${key}`;
   }
 }
