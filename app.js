@@ -167,11 +167,11 @@ const state = {
   },
   logs: JSON.parse(localStorage.getItem('ruoc_logs')) || [],
   gamification: JSON.parse(localStorage.getItem('ruoc_gamification')) || {
-    xp: 120,
+    xp: 0,
     level: 1,
-    streak: 3,
+    streak: 1,
     lastActiveDate: TODAY_STR,
-    badges: ['First Step', 'Focus Explorer']
+    badges: ['First Step']
   },
   rewards: JSON.parse(localStorage.getItem('lauren_rewards')) || {
     hourly: "15 mins music break / Favorite song stretch",
@@ -943,7 +943,10 @@ function renderWorkspaceTab() {
           </div>
         </div>
 
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+          <button onclick="clearAllData()" class="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold shadow-sm">
+            🧹 Reset Progress to Level 1
+          </button>
           <button onclick="closeRewardsModal()" class="btn-primary-blue text-xs">Save Rewards & Close</button>
         </div>
       </div>
