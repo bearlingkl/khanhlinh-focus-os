@@ -375,6 +375,13 @@ function renderTabContent() {
 // WORKSPACE TAB RENDERER — PURE ENGLISH & HIGH CONTRAST
 function renderWorkspaceTab() {
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId) || state.tasks[0] || null;
+  
+  if (activeTask && activeTask.estDurationMins && state.timer.status === 'idle') {
+    const targetSeconds = activeTask.estDurationMins * 60;
+    state.timer.secondsLeft = targetSeconds;
+    state.timer.totalSeconds = targetSeconds;
+  }
+
   const areaFilters = ['ALL', ...state.customAreas];
 
   return `
@@ -1883,7 +1890,8 @@ function saveTaskModal() {
     state.activeTaskId = newTask.id;
   }
 
-  saveTasks();
+  autoShiftAndSortTasks();
+  if (state.activeTaskId) setActiveTask(state.activeTaskId);
   closeTaskModal();
   renderTabContent();
 }
@@ -2009,7 +2017,52 @@ function setAreaFilter(areaKey) {
 
 function setActiveTask(id) {
   state.activeTaskId = id;
+  const activeTask = state.tasks.find(t => t.id === id);
+  if (activeTask && activeTask.estDurationMins) {
+    const targetSeconds = activeTask.estDurationMins * 60;
+    state.timer.secondsLeft = targetSeconds;
+    state.timer.totalSeconds = targetSeconds;
+    state.timer.status = 'idle';
+    if (state.timer.intervalId) {
+      clearInterval(state.timer.intervalId);
+      state.timer.intervalId = null;
+    }
+  }
   renderTabContent();
+}
+
+function autoShiftAndSortTasks() {
+  // 1. Sort all tasks chronologically by startTime
+  state.tasks.sort((a, b) => {
+    const timeA = a.startTime || '00:00';
+    const timeB = b.startTime || '00:00';
+    return timeA.localeCompare(timeB);
+  });
+
+  // 2. Cascade time shifts if tasks overlap
+  for (let i = 0; i < state.tasks.length - 1; i++) {
+    const current = state.tasks[i];
+    const next = state.tasks[i + 1];
+
+    if (current.endTime && next.startTime) {
+      if (current.endTime > next.startTime) {
+        const duration = next.estDurationMins || 30;
+        next.startTime = current.endTime;
+
+        const [h, m] = next.startTime.split(':').map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        const endD = new Date(d.getTime() + duration * 60000);
+        const endH = endD.getHours().toString().padStart(2, '0');
+        const endM = endD.getMinutes().toString().padStart(2, '0');
+        next.endTime = `${endH}:${endM}`;
+      }
+    }
+  }
+
+  // 3. Final chronological re-sort
+  state.tasks.sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
+  saveTasks();
 }
 
 function saveTasks() {
