@@ -1951,6 +1951,25 @@ function saveOutcomeModal() {
 
   addXP(20);
 
+  // Remove completed task from active task board once logged
+  state.tasks = state.tasks.filter(t => t.id !== activeTask.id);
+  const remainingTask = state.tasks[0] || null;
+  state.activeTaskId = remainingTask ? remainingTask.id : null;
+
+  if (remainingTask && remainingTask.estDurationMins) {
+    const targetSeconds = remainingTask.estDurationMins * 60;
+    state.timer.secondsLeft = targetSeconds;
+    state.timer.totalSeconds = targetSeconds;
+  } else {
+    state.timer.secondsLeft = state.settings.workDuration * 60;
+    state.timer.totalSeconds = state.settings.workDuration * 60;
+  }
+  state.timer.status = 'idle';
+  if (state.timer.intervalId) {
+    clearInterval(state.timer.intervalId);
+    state.timer.intervalId = null;
+  }
+
   saveTasks();
   localStorage.setItem('ruoc_logs', JSON.stringify(state.logs));
   closeOutcomeModal();
