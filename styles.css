@@ -1,0 +1,329 @@
+/* Khánh Linh Cố Lên — Design System & Pure English Aesthetic (v7.0) */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap');
+
+:root {
+  --font-heading: 'Outfit', sans-serif;
+  --font-title: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  /* High Contrast Minimalist Blue-Green Palette */
+  --primary-blue: #0284C7;
+  --primary-blue-dark: #0369A1;
+  --primary-green: #059669;
+  --primary-green-dark: #047857;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --bg-card: #FFFFFF;
+  --border-card: #0284C7;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  min-height: 100vh;
+  background-color: #E0F2FE;
+  color: var(--text-primary);
+  overflow-x: hidden;
+}
+
+/* Minimalist Mood Themes */
+body.mood-calm { background-color: #E0F2FE; color: #0F172A; }
+body.mood-energetic { background-color: #ECFDF5; color: #0F172A; }
+body.mood-focus { background-color: #F0F9FF; color: #0F172A; }
+body.mood-reflective { background-color: #0F172A; color: #F8FAFC; }
+body.mood-creative { background-color: #E0FAFF; color: #0F172A; }
+
+/* Header Banner Section */
+.header-banner {
+  position: relative;
+  width: 100%;
+  min-height: 200px;
+  background-size: cover;
+  background-position: center;
+  transition: background-image 0.5s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.header-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 44, 34, 0.5) 0%, rgba(15, 23, 42, 0.75) 100%);
+  backdrop-filter: blur(1.5px);
+}
+
+.header-content {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 1280px;
+  padding: 1rem 1.5rem;
+}
+
+/* Header Title - Modern Plus Jakarta Sans Font for "Khánh Linh cố lên" */
+.header-title-fancy {
+  font-family: var(--font-title);
+  font-size: 3.4rem;
+  font-weight: 900;
+  color: #FFFFFF;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* Glassmorphic Cards - WCAG Strict High Contrast */
+.glass-card {
+  background: #FFFFFF;
+  border: 1.5px solid #0284C7;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.12);
+  color: #0F172A;
+}
+
+body.mood-reflective .glass-card {
+  background: #1E293B;
+  border-color: #38BDF8;
+  color: #F8FAFC;
+}
+
+/* Navigation Stack Top Right */
+.nav-stack {
+  display: flex;
+  flex-direction: flex-row;
+  gap: 0.5rem;
+}
+
+.nav-btn {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(10px);
+  color: #FFFFFF;
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 0.5rem 1.2rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: rgba(2, 132, 199, 0.9);
+  border-color: #FFFFFF;
+}
+
+.nav-btn.active {
+  background: linear-gradient(135deg, #0284C7 0%, #059669 100%);
+  border-color: #FFFFFF;
+  box-shadow: 0 0 15px rgba(2, 132, 199, 0.5);
+}
+
+/* Energy Level Buttons */
+.energy-btn {
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  border: 1.5px solid #0284C7;
+  background: #FFFFFF;
+  color: #0F172A;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.energy-btn.active {
+  background: #0284C7 !important;
+  color: #FFFFFF !important;
+  border-color: #0369A1 !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+}
+
+/* High Contrast Input Fields & Modals */
+.modal-card-bright {
+  background: #FFFFFF;
+  border: 2px solid #0284C7;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 50px rgba(2, 132, 199, 0.25);
+  color: #0F172A;
+}
+
+.input-bright {
+  background: #F8FAFC;
+  border: 1.5px solid #0284C7;
+  color: #0F172A;
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.input-bright:focus {
+  outline: none;
+  border-color: #0369A1;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+  background: #FFFFFF;
+}
+
+/* Category Badges with High Contrast */
+.badge-area {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.6rem;
+  background: #E0F2FE;
+  color: #0369A1;
+  border: 1.5px solid #0284C7;
+}
+
+.badge-priority-p1 { background: #FEE2E2; color: #991B1B; border: 1.5px solid #EF4444; font-weight: 800; padding: 0.25rem 0.6rem; border-radius: 0.4rem; font-size: 0.7rem; }
+.badge-priority-p2 { background: #FEF3C7; color: #92400E; border: 1.5px solid #F59E0B; font-weight: 800; padding: 0.25rem 0.6rem; border-radius: 0.4rem; font-size: 0.7rem; }
+.badge-priority-p3 { background: #D1FAE5; color: #065F46; border: 1.5px solid #10B981; font-weight: 800; padding: 0.25rem 0.6rem; border-radius: 0.4rem; font-size: 0.7rem; }
+
+/* Custom Buttons */
+.btn-primary-blue {
+  background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%);
+  color: #FFFFFF;
+  font-weight: 800;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.75rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+}
+
+.btn-primary-blue:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45);
+}
+
+.btn-emerald {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #FFFFFF;
+  font-weight: 800;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.75rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+}
+
+/* Timer Ring & Digits */
+.timer-ring-container {
+  position: relative;
+  width: 230px;
+  height: 230px;
+  margin: 0 auto;
+}
+
+.timer-ring-svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.timer-ring-bg {
+  stroke: #E2E8F0;
+  stroke-width: 8;
+  fill: transparent;
+}
+
+.timer-ring-progress {
+  stroke: #0284C7;
+  stroke-width: 8;
+  stroke-linecap: round;
+  fill: transparent;
+  transition: stroke-dashoffset 1s linear;
+}
+
+.timer-display {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.timer-digits {
+  font-family: var(--font-heading);
+  font-size: 3.4rem;
+  font-weight: 900;
+  color: #0F172A;
+}
+
+/* Interactive Pet Companion Widget */
+.pet-card {
+  background: #FFFFFF;
+  border: 2px solid #0284C7;
+  border-radius: 1.25rem;
+  padding: 1rem;
+  text-align: center;
+  position: relative;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.1);
+}
+
+.pet-avatar {
+  font-size: 3.5rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.pet-speech-bubble {
+  background: #E0F2FE;
+  color: #0F172A;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0.45rem 0.9rem;
+  border-radius: 1rem;
+  border: 1.5px solid #0284C7;
+  display: inline-block;
+  margin-top: 0.4rem;
+}
+
+/* Distraction Button */
+.btn-disturbed {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 2px solid #EF4444;
+  font-weight: 800;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+}
+
+/* Modal Backdrop */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
+::-webkit-scrollbar-thumb { background: #0284C7; border-radius: 3px; }

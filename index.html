@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Khánh Linh cố lên</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="mood-calm font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- Header Banner Section (World Scenery Suite) -->
+  <header id="header-banner-bg" class="header-banner">
+    <div class="header-overlay"></div>
+    
+    <div class="header-content space-y-3">
+      <!-- Top Row: Scenery Location Badge & Header Utility Actions -->
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/20 pb-2">
+        <div class="flex items-center gap-2">
+          <button onclick="nextScenery()" class="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border border-white/40 transition flex items-center gap-1">
+            🌄 View Scenery
+          </button>
+          <button onclick="openLocationInsightModal()" class="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border border-white/40 transition flex items-center gap-1">
+            🗺️ Location Insight
+          </button>
+        </div>
+        
+        <div id="scenery-location-badge" class="text-xs font-extrabold text-white bg-black/60 px-4 py-1.5 rounded-full border border-white/40 shadow-md">
+          📍 Kyoto Cherry Blossoms, Japan
+        </div>
+      </div>
+
+      <!-- Main Header Bar -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-1">
+        <!-- Top Left: App Title (Khánh Linh cố lên) -->
+        <div>
+          <h1 class="header-title-fancy tracking-tight">
+            Khánh Linh cố lên
+          </h1>
+        </div>
+
+        <!-- Top Center: Real-Time Digital Clock -->
+        <div class="text-center text-white hidden sm:block drop-shadow-lg">
+          <div id="live-date" class="text-xs font-extrabold uppercase tracking-widest opacity-95">Monday, August 10, 2026</div>
+          <div id="live-clock" class="font-mono font-extrabold text-4xl lg:text-5xl tracking-tight my-0.5">11 : 46 : 32 AM</div>
+        </div>
+
+        <!-- Top Right: Vertical Stacked Navigation Menu (2 Tabs: Workspace & Analytics) -->
+        <nav id="nav-container" class="nav-stack">
+          <!-- Navigation buttons dynamically injected by app.js -->
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Lower Workspace (Ambient Surface) -->
+  <main id="main-content-container" class="flex-1">
+    <!-- Tab contents dynamically rendered here -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-4 text-center text-xs font-extrabold text-slate-700 border-t border-slate-300">
+    Khánh Linh cố lên • High Contrast Design System • Focus & Productivity OS
+  </footer>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
