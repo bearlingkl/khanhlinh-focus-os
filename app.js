@@ -993,6 +993,40 @@ function renderWorkspaceTab() {
         </button>
       </div>
     </div>
+
+    <!-- MODAL: MULTI-DEVICE SYNC & DATA TRANSFER -->
+    <div id="sync-modal" class="modal-backdrop hidden">
+      <div class="modal-card-bright w-full max-w-lg p-6 space-y-4">
+        <div class="flex justify-between items-center border-b border-sky-200 pb-3">
+          <h3 class="font-extrabold text-lg text-sky-800 flex items-center gap-2">
+            ☁️ Multi-Device & Cross-Browser Sync
+          </h3>
+          <button onclick="closeSyncModal()" class="text-sm font-bold opacity-60 hover:opacity-100">✕</button>
+        </div>
+
+        <div class="bg-amber-50 p-3 rounded-xl border border-amber-300 text-xs text-slate-900 space-y-1 font-bold">
+          <div class="font-extrabold text-sm text-amber-900">💡 Why browsers show different data:</div>
+          <div>Each browser (Chrome, Safari, Edge, iPhone) keeps its own local storage. To open your latest updated tasks on any phone or browser, use 1-Click Sync below!</div>
+        </div>
+
+        <div class="space-y-3 pt-2">
+          <h4 class="font-extrabold text-sm text-slate-900">⚡ 1-Click Instant Data Transfer:</h4>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="exportJSONData()" class="btn-primary-blue text-xs justify-center py-2.5">
+              📥 Copy Backup JSON (From this device)
+            </button>
+            <button onclick="importJSONDataPrompt()" class="btn-emerald text-xs justify-center py-2.5">
+              📤 Import JSON (Paste into new device)
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2 border-t border-slate-200">
+          <button onclick="closeSyncModal()" class="btn-primary-blue text-xs">Done & Close</button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -2156,5 +2190,54 @@ function clearAllData() {
   if (confirm("Are you sure you want to clear all LocalStorage data?")) {
     localStorage.clear();
     location.reload();
+  }
+}
+
+// MULTI-DEVICE SYNC & DATA TRANSFER HELPERS
+function openSyncModal() {
+  const modal = document.getElementById('sync-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSyncModal() {
+  const modal = document.getElementById('sync-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function exportJSONData() {
+  const masterPayload = {
+    customAreas: state.customAreas,
+    dailyContext: state.dailyContext,
+    tasks: state.tasks,
+    logs: state.logs,
+    gamification: state.gamification,
+    rewards: state.rewards
+  };
+
+  const jsonStr = JSON.stringify(masterPayload);
+  navigator.clipboard.writeText(jsonStr).then(() => {
+    alert("📋 Master Data JSON copied to clipboard! Open web on your phone/Safari/iPad, click '☁️ Multi-Device Sync -> Import JSON' and paste it!");
+  }).catch(() => {
+    prompt("Copy this JSON text code:", jsonStr);
+  });
+}
+
+function importJSONDataPrompt() {
+  const jsonStr = prompt("Paste your Master Backup JSON code below to restore latest data on this browser/device:");
+  if (!jsonStr) return;
+
+  try {
+    const payload = JSON.parse(jsonStr);
+    if (payload.customAreas) localStorage.setItem('lauren_custom_areas', JSON.stringify(payload.customAreas));
+    if (payload.dailyContext) localStorage.setItem('lauren_daily_context', JSON.stringify(payload.dailyContext));
+    if (payload.tasks) localStorage.setItem('ruoc_tasks', JSON.stringify(payload.tasks));
+    if (payload.logs) localStorage.setItem('ruoc_logs', JSON.stringify(payload.logs));
+    if (payload.gamification) localStorage.setItem('ruoc_gamification', JSON.stringify(payload.gamification));
+    if (payload.rewards) localStorage.setItem('lauren_rewards', JSON.stringify(payload.rewards));
+
+    alert("🎉 Multi-Device Sync successful! Reloading page...");
+    location.reload();
+  } catch (err) {
+    alert(`Import failed: Invalid JSON code (${err.message})`);
   }
 }
