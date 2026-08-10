@@ -261,10 +261,91 @@ class SoundScapeManager {
 
 const audioManager = new SoundScapeManager();
 
+// REAL-TIME AUTOMATIC CLOUD SYNC ENGINE (100% AUTOMATIC ZERO-MANUAL WORK)
+const CLOUD_SYNC_KEY = localStorage.getItem('khanhlinh_sync_key') || 'bearlingkl_master_focus_os';
+
+async function autoFetchFromCloud() {
+  try {
+    updateCloudSyncStatus('SYNCING...');
+    const res = await fetch(`https://kvdb.io/59xH4p6B1j9L3zQ2mK8v1P/${CLOUD_SYNC_KEY}`);
+    if (res.ok) {
+      const payload = await res.json();
+      if (payload && payload.tasks && Array.isArray(payload.tasks)) {
+        state.customAreas = payload.customAreas || state.customAreas;
+        state.dailyContext = payload.dailyContext || state.dailyContext;
+        state.tasks = payload.tasks || state.tasks;
+        state.logs = payload.logs || state.logs;
+        state.gamification = payload.gamification || state.gamification;
+        state.rewards = payload.rewards || state.rewards;
+
+        localStorage.setItem('lauren_custom_areas', JSON.stringify(state.customAreas));
+        localStorage.setItem('lauren_daily_context', JSON.stringify(state.dailyContext));
+        localStorage.setItem('ruoc_tasks', JSON.stringify(state.tasks));
+        localStorage.setItem('ruoc_logs', JSON.stringify(state.logs));
+        localStorage.setItem('ruoc_gamification', JSON.stringify(state.gamification));
+        localStorage.setItem('lauren_rewards', JSON.stringify(state.rewards));
+
+        updateCloudSyncStatus('LIVE SYNCED');
+        renderApp();
+      }
+    } else {
+      autoPushToCloud();
+    }
+  } catch (e) {
+    console.log('Cloud sync fetch offline:', e);
+    updateCloudSyncStatus('LOCAL ONLY');
+  }
+}
+
+let syncTimeout = null;
+function autoPushToCloud() {
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(async () => {
+    try {
+      updateCloudSyncStatus('SAVING...');
+      const payload = {
+        customAreas: state.customAreas,
+        dailyContext: state.dailyContext,
+        tasks: state.tasks,
+        logs: state.logs,
+        gamification: state.gamification,
+        rewards: state.rewards,
+        lastUpdated: new Date().toISOString()
+      };
+
+      await fetch(`https://kvdb.io/59xH4p6B1j9L3zQ2mK8v1P/${CLOUD_SYNC_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      updateCloudSyncStatus('LIVE SYNCED');
+    } catch (e) {
+      updateCloudSyncStatus('LOCAL ONLY');
+    }
+  }, 800);
+}
+
+function updateCloudSyncStatus(statusText) {
+  const btn = document.getElementById('cloud-sync-status-btn');
+  if (!btn) return;
+
+  if (statusText === 'LIVE SYNCED') {
+    btn.className = "px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white backdrop-blur-md border border-emerald-400 transition flex items-center gap-1 shadow-sm";
+    btn.innerHTML = `🟢 Live Cloud Synced`;
+  } else if (statusText === 'SAVING...' || statusText === 'SYNCING...') {
+    btn.className = "px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-amber-500 text-white backdrop-blur-md border border-amber-300 transition flex items-center gap-1 shadow-sm animate-pulse";
+    btn.innerHTML = `⚡ ${statusText}`;
+  } else {
+    btn.className = "px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-slate-700 text-white backdrop-blur-md border border-slate-500 transition flex items-center gap-1 shadow-sm";
+    btn.innerHTML = `☁️ Offline Local`;
+  }
+}
+
 // App Initialization
 document.addEventListener('DOMContentLoaded', () => {
   initClockAndMood();
   renderApp();
+  autoFetchFromCloud();
 });
 
 // Clock & Mood Engine
@@ -1699,6 +1780,7 @@ function deleteDeadline(idx) {
 
 function saveDailyContext() {
   localStorage.setItem('lauren_daily_context', JSON.stringify(state.dailyContext));
+  if (typeof autoPushToCloud === 'function') autoPushToCloud();
 }
 
 // AUTO-FILL FROM MARKDOWN / AG
@@ -2101,6 +2183,7 @@ function autoShiftAndSortTasks() {
 
 function saveTasks() {
   localStorage.setItem('ruoc_tasks', JSON.stringify(state.tasks));
+  if (typeof autoPushToCloud === 'function') autoPushToCloud();
 }
 
 function saveScratchpad(val) {
