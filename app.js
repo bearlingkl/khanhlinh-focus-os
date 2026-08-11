@@ -369,6 +369,7 @@ function renderTabContent() {
     updateTimerDisplay();
   } else if (state.activeTab === 'analytics') {
     container.innerHTML = renderAnalyticsTab();
+    setTimeout(() => initAnalyticsCharts(), 50);
   }
 }
 
@@ -1276,32 +1277,302 @@ function loadYouTubeVideo() {
   if (container) container.innerHTML = renderYouTubePlayer(val);
 }
 
-// ANALYTICS TAB RENDERER
+// ANALYTICS TIME-HORIZON & DISTRIBUTION ENGINE
+function setAnalyticsTimeframe(timeframe) {
+  state.analyticsTimeframe = timeframe;
+  renderTabContent();
+}
+
+function getFilteredLogs(timeframe) {
+  if (!state.logs || state.logs.length === 0) return [];
+  
+  const selectedDate = state.selectedDate || TODAY_STR;
+  const targetDateObj = new Date(selectedDate);
+
+  if (timeframe === '1day') {
+    return state.logs.filter(l => l.date === selectedDate);
+  }
+
+  if (timeframe === '7days') {
+    const cutoff7 = new Date(targetDateObj);
+    cutoff7.setDate(cutoff7.getDate() - 6);
+    const cutoffStr = cutoff7.toISOString().split('T')[0];
+    return state.logs.filter(l => l.date >= cutoffStr && l.date <= selectedDate);
+  }
+
+  if (timeframe === '30days') {
+    const cutoff30 = new Date(targetDateObj);
+    cutoff30.setDate(cutoff30.getDate() - 29);
+    const cutoffStr = cutoff30.toISOString().split('T')[0];
+    return state.logs.filter(l => l.date >= cutoffStr && l.date <= selectedDate);
+  }
+
+  return state.logs;
+}
+
+function computeTimeDistribution(logs) {
+  const totalMins = logs.reduce((sum, l) => sum + (l.focusMinutes || 0), 0);
+  const usefulMins = logs.reduce((sum, l) => sum + (l.usefulMins || 0), 0);
+  const uselessMins = logs.reduce((sum, l) => sum + (l.uselessMins || 0), 0);
+
+  // Area aggregation
+  const areaMap = {};
+  logs.forEach(l => {
+    const area = l.area || 'Other';
+    const mins = l.focusMinutes || 0;
+    areaMap[area] = (areaMap[area] || 0) + mins;
+  });
+
+  const areaList = Object.keys(areaMap).map(area => {
+    const mins = areaMap[area];
+    const pct = totalMins > 0 ? Math.round((mins / totalMins) * 100) : 0;
+    const hours = (mins / 60).toFixed(1);
+    return { name: area, mins, hours, pct };
+  }).sort((a, b) => b.mins - a.mins);
+
+  // Project aggregation
+  const projMap = {};
+  logs.forEach(l => {
+    const proj = l.project || 'General';
+    const mins = l.focusMinutes || 0;
+    projMap[proj] = (projMap[proj] || 0) + mins;
+  });
+
+  const projList = Object.keys(projMap).map(proj => {
+    const mins = projMap[proj];
+    const pct = totalMins > 0 ? Math.round((mins / totalMins) * 100) : 0;
+    const hours = (mins / 60).toFixed(1);
+    return { name: proj, mins, hours, pct };
+  }).sort((a, b) => b.mins - a.mins);
+
+  const mostFocused = areaList.length > 0 ? areaList[0] : null;
+  const leastFocused = areaList.length > 0 ? areaList[areaList.length - 1] : null;
+
+  return {
+    totalMins,
+    totalHours: (totalMins / 60).toFixed(1),
+    usefulMins,
+    uselessMins,
+    areaList,
+    projList,
+    mostFocused,
+    leastFocused
+  };
+}
+
+function initAnalyticsCharts() {
+  const timeframe = state.analyticsTimeframe || '1day';
+  const logs = getFilteredLogs(timeframe);
+  const data = computeTimeDistribution(logs);
+
+  if (data.areaList.length === 0) return;
+
+  const areaCtx = document.getElementById('areaChartCanvas');
+  if (areaCtx && window.Chart) {
+    if (window.activeAreaChart) window.activeAreaChart.destroy();
+    window.activeAreaChart = new Chart(areaCtx, {
+      type: 'doughnut',
+      data: {
+        labels: data.areaList.map(a => `${a.name} (${a.pct}%)`),
+        datasets: [{
+          data: data.areaList.map(a => a.mins),
+          backgroundColor: ['#0284C7', '#059669', '#D97706', '#7C3AED', '#DB2777', '#475569'],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { weight: 'bold', size: 11 } } }
+        }
+      }
+    });
+  }
+
+  const projCtx = document.getElementById('projChartCanvas');
+  if (projCtx && window.Chart) {
+    if (window.activeProjChart) window.activeProjChart.destroy();
+    window.activeProjChart = new Chart(projCtx, {
+      type: 'bar',
+      data: {
+        labels: data.projList.slice(0, 6).map(p => p.name),
+        datasets: [{
+          label: 'Số Phút Focus',
+          data: data.projList.slice(0, 6).map(p => p.mins),
+          backgroundColor: '#0284C7',
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { ticks: { font: { weight: 'bold' } } },
+          y: { ticks: { font: { weight: 'bold' } } }
+        }
+      }
+    });
+  }
+}
+
+// ANALYTICS TAB RENDERER — HIGH CONTRAST & DYNAMIC TIME ALLOCATION
 function renderAnalyticsTab() {
-  const totalFocusMins = state.logs.reduce((acc, l) => acc + (l.focusMinutes || 0), 0);
-  const usefulMins = state.logs.reduce((acc, l) => acc + (l.usefulMins || 0), 0);
-  const uselessMins = state.logs.reduce((acc, l) => acc + (l.uselessMins || 0), 0);
+  const timeframe = state.analyticsTimeframe || '1day';
+  const logs = getFilteredLogs(timeframe);
+  const dist = computeTimeDistribution(logs);
+
+  const colors = ['bg-sky-600', 'bg-emerald-600', 'bg-amber-500', 'bg-purple-600', 'bg-pink-600', 'bg-slate-600'];
 
   return `
-    <div class="max-w-6xl mx-auto p-4 lg:p-6 space-y-6">
+    <div class="max-w-7xl mx-auto p-4 lg:p-6 space-y-6">
       
-      <!-- Top Metrics Overview -->
+      <!-- Timeframe Selection Bar & Filter Header -->
+      <div class="glass-card p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div>
+          <h2 class="font-extrabold text-lg text-sky-900 flex items-center gap-2">
+            📊 Focus & Productivity Analytics
+          </h2>
+          <p class="text-xs text-slate-600 font-semibold">Theo dõi tổng thời gian tập trung và tỷ lệ phân bổ công việc theo ngày, tuần, tháng.</p>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-300">
+          <button onclick="setAnalyticsTimeframe('1day')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${timeframe === '1day' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'}">
+            📅 Hôm Nay (1 Ngày)
+          </button>
+          <button onclick="setAnalyticsTimeframe('7days')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${timeframe === '7days' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'}">
+            🗓️ 7 Ngày Qua (1 Tuần)
+          </button>
+          <button onclick="setAnalyticsTimeframe('30days')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${timeframe === '30days' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'}">
+            📆 30 Ngày Qua (1 Tháng)
+          </button>
+          <button onclick="setAnalyticsTimeframe('all')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${timeframe === 'all' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'}">
+            🌐 Tất Cả Thời Gian
+          </button>
+        </div>
+      </div>
+
+      <!-- Top KPI Cards Overview -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="glass-card p-4 text-center">
-          <div class="text-xs font-bold text-slate-600 uppercase">Total Focus Time</div>
-          <div class="text-2xl font-extrabold font-mono text-sky-800 mt-1">${totalFocusMins} mins</div>
+        <div class="glass-card p-4 text-center space-y-1">
+          <div class="text-xs font-extrabold text-slate-700 uppercase tracking-wider">⏱️ TỔNG THỜI GIAN FOCUS</div>
+          <div class="text-3xl font-extrabold font-mono text-sky-800">${dist.totalHours} <span class="text-sm font-bold">giờ</span></div>
+          <div class="text-[11px] font-bold text-sky-900">(${dist.totalMins} phút tập trung)</div>
         </div>
-        <div class="glass-card p-4 text-center">
-          <div class="text-xs font-bold text-slate-600 uppercase">Sessions Logged</div>
-          <div class="text-2xl font-extrabold font-mono text-emerald-700 mt-1">${state.logs.length}</div>
+
+        <div class="glass-card p-4 text-center space-y-1 border-2 border-emerald-400">
+          <div class="text-xs font-extrabold text-emerald-900 uppercase tracking-wider">🔥 LÀM NHIỀU NHẤT</div>
+          <div class="text-base font-extrabold text-emerald-800 truncate" title="${dist.mostFocused ? dist.mostFocused.name : 'Chưa có'}">
+            ${dist.mostFocused ? dist.mostFocused.name : 'Chưa có'}
+          </div>
+          <div class="text-xs font-extrabold text-emerald-700">
+            ${dist.mostFocused ? `${dist.mostFocused.hours}h (${dist.mostFocused.pct}%)` : '0%'}
+          </div>
         </div>
-        <div class="glass-card p-4 text-center">
-          <div class="text-xs font-bold text-slate-600 uppercase">🟢 Useful Interruption</div>
-          <div class="text-2xl font-extrabold font-mono text-emerald-600 mt-1">${usefulMins} mins</div>
+
+        <div class="glass-card p-4 text-center space-y-1 border-2 border-amber-300">
+          <div class="text-xs font-extrabold text-amber-900 uppercase tracking-wider">🌱 LÀM ÍT NHẤT</div>
+          <div class="text-base font-extrabold text-amber-800 truncate" title="${dist.leastFocused ? dist.leastFocused.name : 'Chưa có'}">
+            ${dist.leastFocused ? dist.leastFocused.name : 'Chưa có'}
+          </div>
+          <div class="text-xs font-extrabold text-amber-700">
+            ${dist.leastFocused ? `${dist.leastFocused.hours}h (${dist.leastFocused.pct}%)` : '0%'}
+          </div>
         </div>
-        <div class="glass-card p-4 text-center">
-          <div class="text-xs font-bold text-slate-600 uppercase">🔴 Useless Lost Mins</div>
-          <div class="text-2xl font-extrabold font-mono text-red-600 mt-1">${uselessMins} mins</div>
+
+        <div class="glass-card p-4 text-center space-y-1">
+          <div class="text-xs font-extrabold text-slate-700 uppercase tracking-wider">📈 SỐ PHIÊN ĐÃ LOGGED</div>
+          <div class="text-3xl font-extrabold font-mono text-purple-800">${logs.length}</div>
+          <div class="text-[11px] font-bold text-slate-700">🟢 ${dist.usefulMins}m useful / 🔴 ${dist.uselessMins}m lost</div>
+        </div>
+      </div>
+
+      <!-- Time Allocation Breakdown Grid (Areas & Projects) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Left: Allocation by Mảng / Area -->
+        <div class="glass-card p-5 space-y-4">
+          <h3 class="font-extrabold text-sm uppercase tracking-wider text-sky-900 border-b border-sky-200 pb-2 flex justify-between items-center">
+            <span>🎯 Phân Bổ Theo Mảng Công Việc (Areas)</span>
+            <span class="text-xs font-bold text-slate-600">${dist.areaList.length} Mảng</span>
+          </h3>
+
+          ${dist.areaList.length === 0 ? `
+            <div class="text-xs text-slate-500 font-semibold text-center py-6">Chưa có dữ liệu cho khoảng thời gian này.</div>
+          ` : `
+            <div class="space-y-3">
+              <!-- Multi-Segment Distribution Bar -->
+              <div class="h-4 rounded-full overflow-hidden flex bg-slate-200 shadow-inner">
+                ${dist.areaList.map((a, i) => `
+                  <div class="${colors[i % colors.length]}" style="width: ${a.pct}%;" title="${a.name}: ${a.hours}h (${a.pct}%)"></div>
+                `).join('')}
+              </div>
+
+              <!-- List with Detailed Stats -->
+              <div class="space-y-2 pt-1">
+                ${dist.areaList.map((a, i) => `
+                  <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <div class="flex justify-between items-center text-xs font-extrabold">
+                      <span class="flex items-center gap-2 text-slate-900">
+                        <span class="w-3 h-3 rounded-full ${colors[i % colors.length]} inline-block"></span>
+                        ${a.name}
+                      </span>
+                      <span class="font-mono text-sky-800">${a.hours} giờ (${a.mins}m) — <span class="text-emerald-700">${a.pct}%</span></span>
+                    </div>
+                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div class="${colors[i % colors.length]} h-2 rounded-full" style="width: ${a.pct}%;"></div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `}
+        </div>
+
+        <!-- Right: Allocation by Dự Án / Project -->
+        <div class="glass-card p-5 space-y-4">
+          <h3 class="font-extrabold text-sm uppercase tracking-wider text-sky-900 border-b border-sky-200 pb-2 flex justify-between items-center">
+            <span>💼 Phân Bổ Theo Dự Án (Projects)</span>
+            <span class="text-xs font-bold text-slate-600">${dist.projList.length} Dự Án</span>
+          </h3>
+
+          ${dist.projList.length === 0 ? `
+            <div class="text-xs text-slate-500 font-semibold text-center py-6">Chưa có dữ liệu cho khoảng thời gian này.</div>
+          ` : `
+            <div class="space-y-2.5">
+              ${dist.projList.map((p, i) => `
+                <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <div class="flex justify-between items-center text-xs font-extrabold">
+                    <span class="text-slate-900 truncate max-w-xs" title="${p.name}">📌 ${p.name}</span>
+                    <span class="font-mono text-sky-800">${p.hours}h (${p.mins}m) — <span class="text-emerald-700">${p.pct}%</span></span>
+                  </div>
+                  <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                    <div class="bg-sky-600 h-2 rounded-full" style="width: ${p.pct}%;"></div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+      </div>
+
+      <!-- Chart.js Visual Canvas Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-card p-5 space-y-3 text-center">
+          <h4 class="font-extrabold text-xs uppercase tracking-wider text-slate-900">🍩 Biểu Đồ Phân Bổ Theo Mảng (Donut Chart)</h4>
+          <div class="max-w-xs mx-auto">
+            <canvas id="areaChartCanvas" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card p-5 space-y-3 text-center">
+          <h4 class="font-extrabold text-xs uppercase tracking-wider text-slate-900">📊 Biểu Đồ Top Dự Án Focus Nhất (Bar Chart)</h4>
+          <div class="w-full">
+            <canvas id="projChartCanvas" height="220"></canvas>
+          </div>
         </div>
       </div>
 
@@ -1309,19 +1580,16 @@ function renderAnalyticsTab() {
       <div class="glass-card p-6 space-y-4">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-sky-200 pb-3">
           <div>
-            <h3 class="font-extrabold text-base text-sky-800">Master Data Log (Editable)</h3>
-            <p class="text-xs text-slate-600 font-semibold">View, edit, or delete logged session data.</p>
+            <h3 class="font-extrabold text-base text-sky-800">Master Data Log (${logs.length} Entries)</h3>
+            <p class="text-xs text-slate-600 font-semibold">Bảng dữ liệu chi tiết từng task trong khoảng thời gian đã chọn.</p>
           </div>
           <div class="flex gap-2">
             <button onclick="downloadCSV()" class="btn-primary-blue text-xs">
               📥 Download Daily CSV
             </button>
-            <button onclick="openSheetsSyncModal()" class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 font-bold text-xs">
-              ⚙️ Setup Webhook
-            </button>
-            <button onclick="syncToGoogleSheets()" class="btn-emerald text-xs">
-              ⚡ Sync to Google Sheets
-            </button>
+            <a href="https://docs.google.com/spreadsheets/d/1MYzDH_zzuK82qlRA65HXaPZDGlhxVMAIrwryue0DmO4/edit?gid=0#gid=0" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm flex items-center gap-1.5 transition">
+              📊 Open My Google Sheet ↗
+            </a>
           </div>
         </div>
 
@@ -1342,9 +1610,9 @@ function renderAnalyticsTab() {
               </tr>
             </thead>
             <tbody>
-              ${state.logs.length === 0 ? `
-                <tr><td colspan="10" class="text-center p-4 text-slate-500 font-semibold">No logs recorded yet. Complete tasks and log outcomes to populate master table.</td></tr>
-              ` : state.logs.map((l, index) => `
+              ${logs.length === 0 ? `
+                <tr><td colspan="10" class="text-center p-4 text-slate-500 font-semibold">Không có dữ liệu nhật ký cho khoảng thời gian này. Hoàn thành task để xem phân tích!</td></tr>
+              ` : logs.map((l, index) => `
                 <tr class="border-b border-slate-200 hover:bg-sky-50">
                   <td class="p-2 font-mono font-bold">${l.date}</td>
                   <td class="p-2 capitalize font-semibold">${l.session}</td>
@@ -1366,62 +1634,6 @@ function renderAnalyticsTab() {
         </div>
       </div>
 
-    </div>
-
-    <!-- MODAL: GOOGLE SHEETS SYNC CONFIG & RUN -->
-    <div id="sheets-sync-modal" class="modal-backdrop hidden">
-      <div class="modal-card-bright w-full max-w-xl p-6 space-y-4">
-        <div class="flex justify-between items-center border-b border-sky-200 pb-3">
-          <h3 class="font-extrabold text-lg text-emerald-800 flex items-center gap-2">
-            <span>⚡</span> Google Sheets Live Sync Setup
-          </h3>
-          <button onclick="closeSheetsSyncModal()" class="text-sm font-bold opacity-60 hover:opacity-100">✕</button>
-        </div>
-
-        <div class="space-y-3 text-xs font-semibold text-slate-800">
-          <p class="text-slate-700">Dễ dàng đồng bộ dữ liệu nhật ký tập trung (Master Data Log) trực tiếp về <b>Google Sheets</b> cá nhân của Khánh Linh chỉ với 3 bước:</p>
-          
-          <div class="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 space-y-2">
-            <div class="font-extrabold text-emerald-900 text-sm">📋 Hướng dẫn tạo Google Web App Webhook (1 Phút):</div>
-            <ol class="list-decimal list-inside space-y-1 text-slate-900">
-              <li>Mở một file <b>Google Sheets mới</b> trên Google Drive của bạn.</li>
-              <li>Vào menu <b>Tiện ích mở rộng (Extensions) ➔ Apps Script</b>.</li>
-              <li>Dán đoạn code Apps Script bên dưới vào rồi bấm <b>Triển khai (Deploy) ➔ Triển khai dưới dạng ứng dụng web (New Deployment)</b>.</li>
-              <li>Chọn <i>"Người thực thi: Tôi"</i> & <i>"Ai có quyền truy cập: Bất kỳ ai (Anyone)"</i> ➔ Bấm <b>Triển khai</b> và <b>Copy Web App URL</b> dán vào ô bên dưới!</li>
-            </ol>
-          </div>
-
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <label class="font-bold text-slate-900">Code Google Apps Script (Copy & Dán vào Apps Script):</label>
-              <button onclick="copyAppsScriptCode()" class="text-emerald-700 hover:text-emerald-900 font-extrabold text-[11px] underline">📋 Copy Code Script</button>
-            </div>
-            <textarea id="apps-script-code-area" readonly rows="6" class="w-full font-mono text-[11px] bg-slate-900 text-emerald-400 p-3 rounded-xl border border-slate-700 focus:outline-none">
-function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = JSON.parse(e.postData.contents);
-  if (data.logs && data.logs.length > 0) {
-    data.logs.forEach(function(l) {
-      sheet.appendRow([l.date, l.session, l.area, l.project, l.task, l.goal, l.outcome, l.completionPct + '%', l.focusMinutes + 'm', l.usefulMins + 'm', l.uselessMins + 'm']);
-    });
-  }
-  return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
-}</textarea>
-          </div>
-
-          <div>
-            <label class="block font-bold text-slate-900 mb-1">Google Web App URL (*):</label>
-            <input type="url" id="sheets-webhook-url-input" value="${state.settings.webhookUrl || ''}" class="input-bright w-full font-mono text-xs font-bold text-slate-900" placeholder="https://script.google.com/macros/s/.../exec">
-          </div>
-        </div>
-
-        <div class="flex justify-between items-center pt-2 border-t border-slate-200">
-          <button onclick="closeSheetsSyncModal()" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-xs font-bold text-slate-900">Close</button>
-          <button onclick="saveAndSyncGoogleSheets()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5">
-            ⚡ Save & Sync Now
-          </button>
-        </div>
-      </div>
     </div>
   `;
 }
