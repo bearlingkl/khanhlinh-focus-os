@@ -1620,7 +1620,9 @@ function renderAnalyticsTab() {
                   <td class="p-2 font-semibold">${l.project}</td>
                   <td class="p-2 font-extrabold text-slate-900">${l.task}</td>
                   <td class="p-2 max-w-xs truncate" title="${l.goal}">${l.goal || '-'}</td>
-                  <td class="p-2 max-w-xs truncate" title="${l.outcome}">${l.completionPct}% - ${l.outcome || '-'}</td>
+                  <td class="p-2 max-w-xs truncate" title="${l.outcome}">
+                    ${(l.outcome || '').includes('%') ? l.outcome : `${l.completionPct}% - ${l.outcome || '-'}`}
+                  </td>
                   <td class="p-2 font-mono font-extrabold text-sky-800">${l.focusMinutes}m</td>
                   <td class="p-2 font-bold">🟢 ${l.usefulMins}m / 🔴 ${l.uselessMins}m</td>
                   <td class="p-2 text-right space-x-1">
@@ -1700,7 +1702,13 @@ function finishTaskEarly() {
 
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId);
   if (activeTask) {
-    activeTask.pomsDone++;
+    const elapsedNow = Math.round(((state.timer.totalSeconds || 0) - (state.timer.secondsLeft || 0)) / 60);
+    if (elapsedNow > 0) {
+      activeTask.accumulatedFocusMins = (activeTask.accumulatedFocusMins || 0) + elapsedNow;
+    }
+    if (!activeTask.pomsDone || activeTask.pomsDone === 0) {
+      activeTask.pomsDone = 1;
+    }
     saveTasks();
     openOutcomeModal(activeTask.id);
   } else {
@@ -1714,13 +1722,24 @@ function onTimerComplete() {
   
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId);
   if (activeTask) {
-    activeTask.pomsDone++;
+    activeTask.pomsDone = (activeTask.pomsDone || 0) + 1;
+    const sessionMins = Math.round((state.timer.totalSeconds || ((activeTask.estDurationMins || 25) * 60)) / 60);
+    activeTask.accumulatedFocusMins = (activeTask.accumulatedFocusMins || 0) + sessionMins;
     saveTasks();
-    openOutcomeModal(activeTask.id);
-  }
 
-  alert("🎉 Pomodoro Session Completed! Great focus, Khanh Linh.");
-  resetTimer();
+    const assignedPoms = activeTask.pomsCount || activeTask.poms || activeTask.assignedPoms || activeTask.pomsPlanned || 1;
+    
+    if (activeTask.pomsDone >= assignedPoms) {
+      alert(`🎉 Excellent! You completed all ${activeTask.pomsDone} Pomodoros (${activeTask.accumulatedFocusMins} mins total focus) for this task!`);
+      openOutcomeModal(activeTask.id);
+    } else {
+      alert(`🎉 Pomodoro ${activeTask.pomsDone}/${assignedPoms} Completed! (+50 XP). Great focus, Khanh Linh. Take a short break then continue!`);
+      resetTimer();
+    }
+  } else {
+    alert("🎉 Pomodoro Session Completed! Great focus, Khanh Linh.");
+    resetTimer();
+  }
 }
 
 function updateTimerDisplay() {
@@ -2222,12 +2241,14 @@ function saveOutcomeModal() {
   activeTask.nextSteps = next;
   activeTask.outputLinks = outputLinks;
 
-  // Calculate REAL focus minutes instead of hardcoded 25m!
-  const taskPlannedMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+  // Calculate REAL TOTAL focus minutes across all completed/assigned Pomodoros!
+  const singlePomMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+  const pomsCount = Math.max(1, activeTask.pomsCount || activeTask.pomsDone || activeTask.poms || activeTask.assignedPoms || activeTask.pomsPlanned || 1);
   const elapsedFromTimer = Math.round(((state.timer.totalSeconds || 0) - (state.timer.secondsLeft || 0)) / 60);
-  const actualFocusMinutes = (elapsedFromTimer > 0 && state.timer.status !== 'idle') 
-    ? elapsedFromTimer 
-    : taskPlannedMins;
+
+  const actualFocusMinutes = (activeTask.accumulatedFocusMins && activeTask.accumulatedFocusMins > 0)
+    ? activeTask.accumulatedFocusMins + (state.timer.status === 'running' ? elapsedFromTimer : 0)
+    : (pomsCount * singlePomMins);
 
   state.logs.push({
     id: 'log-' + Date.now(),
