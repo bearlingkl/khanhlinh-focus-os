@@ -376,10 +376,15 @@ function renderTabContent() {
 function renderWorkspaceTab() {
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId) || state.tasks[0] || null;
   
-  if (activeTask && activeTask.estDurationMins && state.timer.status === 'idle') {
-    const targetSeconds = activeTask.estDurationMins * 60;
-    state.timer.secondsLeft = targetSeconds;
-    state.timer.totalSeconds = targetSeconds;
+  if (activeTask) {
+    state.activeTaskId = activeTask.id;
+    if (state.timer.status === 'idle' && state.timer.lastInitializedTaskId !== activeTask.id) {
+      const durationMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+      const targetSeconds = durationMins * 60;
+      state.timer.secondsLeft = targetSeconds;
+      state.timer.totalSeconds = targetSeconds;
+      state.timer.lastInitializedTaskId = activeTask.id;
+    }
   }
 
   const areaFilters = ['ALL', ...state.customAreas];
@@ -1311,6 +1316,9 @@ function renderAnalyticsTab() {
             <button onclick="downloadCSV()" class="btn-primary-blue text-xs">
               📥 Download Daily CSV
             </button>
+            <button onclick="openSheetsSyncModal()" class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 font-bold text-xs">
+              ⚙️ Setup Webhook
+            </button>
             <button onclick="syncToGoogleSheets()" class="btn-emerald text-xs">
               ⚡ Sync to Google Sheets
             </button>
@@ -1359,6 +1367,62 @@ function renderAnalyticsTab() {
       </div>
 
     </div>
+
+    <!-- MODAL: GOOGLE SHEETS SYNC CONFIG & RUN -->
+    <div id="sheets-sync-modal" class="modal-backdrop hidden">
+      <div class="modal-card-bright w-full max-w-xl p-6 space-y-4">
+        <div class="flex justify-between items-center border-b border-sky-200 pb-3">
+          <h3 class="font-extrabold text-lg text-emerald-800 flex items-center gap-2">
+            <span>⚡</span> Google Sheets Live Sync Setup
+          </h3>
+          <button onclick="closeSheetsSyncModal()" class="text-sm font-bold opacity-60 hover:opacity-100">✕</button>
+        </div>
+
+        <div class="space-y-3 text-xs font-semibold text-slate-800">
+          <p class="text-slate-700">Dễ dàng đồng bộ dữ liệu nhật ký tập trung (Master Data Log) trực tiếp về <b>Google Sheets</b> cá nhân của Khánh Linh chỉ với 3 bước:</p>
+          
+          <div class="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 space-y-2">
+            <div class="font-extrabold text-emerald-900 text-sm">📋 Hướng dẫn tạo Google Web App Webhook (1 Phút):</div>
+            <ol class="list-decimal list-inside space-y-1 text-slate-900">
+              <li>Mở một file <b>Google Sheets mới</b> trên Google Drive của bạn.</li>
+              <li>Vào menu <b>Tiện ích mở rộng (Extensions) ➔ Apps Script</b>.</li>
+              <li>Dán đoạn code Apps Script bên dưới vào rồi bấm <b>Triển khai (Deploy) ➔ Triển khai dưới dạng ứng dụng web (New Deployment)</b>.</li>
+              <li>Chọn <i>"Người thực thi: Tôi"</i> & <i>"Ai có quyền truy cập: Bất kỳ ai (Anyone)"</i> ➔ Bấm <b>Triển khai</b> và <b>Copy Web App URL</b> dán vào ô bên dưới!</li>
+            </ol>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="font-bold text-slate-900">Code Google Apps Script (Copy & Dán vào Apps Script):</label>
+              <button onclick="copyAppsScriptCode()" class="text-emerald-700 hover:text-emerald-900 font-extrabold text-[11px] underline">📋 Copy Code Script</button>
+            </div>
+            <textarea id="apps-script-code-area" readonly rows="6" class="w-full font-mono text-[11px] bg-slate-900 text-emerald-400 p-3 rounded-xl border border-slate-700 focus:outline-none">
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  if (data.logs && data.logs.length > 0) {
+    data.logs.forEach(function(l) {
+      sheet.appendRow([l.date, l.session, l.area, l.project, l.task, l.goal, l.outcome, l.completionPct + '%', l.focusMinutes + 'm', l.usefulMins + 'm', l.uselessMins + 'm']);
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
+}</textarea>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-900 mb-1">Google Web App URL (*):</label>
+            <input type="url" id="sheets-webhook-url-input" value="${state.settings.webhookUrl || ''}" class="input-bright w-full font-mono text-xs font-bold text-slate-900" placeholder="https://script.google.com/macros/s/.../exec">
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+          <button onclick="closeSheetsSyncModal()" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-xs font-bold text-slate-900">Close</button>
+          <button onclick="saveAndSyncGoogleSheets()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5">
+            ⚡ Save & Sync Now
+          </button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -1367,11 +1431,23 @@ function startTimer() {
   if (state.timer.status === 'running') return;
   state.timer.status = 'running';
   
+  if (state.timer.intervalId) clearInterval(state.timer.intervalId);
+
+  state.timer.lastTickTimestamp = Date.now();
   state.timer.intervalId = setInterval(() => {
+    if (state.timer.status !== 'running') return;
+    const now = Date.now();
+    const delta = Math.floor((now - (state.timer.lastTickTimestamp || now)) / 1000);
+    state.timer.lastTickTimestamp = now;
+
+    const decrement = delta > 0 ? delta : 1;
     if (state.timer.secondsLeft > 0) {
-      state.timer.secondsLeft--;
+      state.timer.secondsLeft = Math.max(0, state.timer.secondsLeft - decrement);
       updateTimerDisplay();
       if (state.pipWindow) updatePipTimerDisplay();
+      if (state.timer.secondsLeft === 0) {
+        onTimerComplete();
+      }
     } else {
       onTimerComplete();
     }
@@ -1934,17 +2010,24 @@ function saveOutcomeModal() {
   activeTask.nextSteps = next;
   activeTask.outputLinks = outputLinks;
 
+  // Calculate REAL focus minutes instead of hardcoded 25m!
+  const taskPlannedMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+  const elapsedFromTimer = Math.round(((state.timer.totalSeconds || 0) - (state.timer.secondsLeft || 0)) / 60);
+  const actualFocusMinutes = (elapsedFromTimer > 0 && state.timer.status !== 'idle') 
+    ? elapsedFromTimer 
+    : taskPlannedMins;
+
   state.logs.push({
     id: 'log-' + Date.now(),
     date: state.selectedDate || TODAY_STR,
-    session: activeTask.session,
-    area: activeTask.area,
-    project: activeTask.project,
-    task: activeTask.name,
-    goal: activeTask.goal,
+    session: activeTask.session || 'afternoon',
+    area: activeTask.area || 'Career OS',
+    project: activeTask.project || 'General',
+    task: activeTask.name || activeTask.title || 'Task',
+    goal: activeTask.goal || '',
     outcome: desc,
     completionPct: pct,
-    focusMinutes: activeTask.pomsDone * state.settings.workDuration,
+    focusMinutes: actualFocusMinutes,
     usefulMins: 0,
     uselessMins: 0
   });
@@ -1956,10 +2039,12 @@ function saveOutcomeModal() {
   const remainingTask = state.tasks[0] || null;
   state.activeTaskId = remainingTask ? remainingTask.id : null;
 
-  if (remainingTask && remainingTask.estDurationMins) {
-    const targetSeconds = remainingTask.estDurationMins * 60;
+  if (remainingTask) {
+    const durationMins = remainingTask.estDurationMins || remainingTask.durationPlannedMin || 25;
+    const targetSeconds = durationMins * 60;
     state.timer.secondsLeft = targetSeconds;
     state.timer.totalSeconds = targetSeconds;
+    state.timer.lastInitializedTaskId = remainingTask.id;
   } else {
     state.timer.secondsLeft = state.settings.workDuration * 60;
     state.timer.totalSeconds = state.settings.workDuration * 60;
@@ -2036,13 +2121,16 @@ function setAreaFilter(areaKey) {
 }
 
 function setActiveTask(id) {
+  if (state.activeTaskId === id) return;
   state.activeTaskId = id;
   const activeTask = state.tasks.find(t => t.id === id);
-  if (activeTask && activeTask.estDurationMins) {
-    const targetSeconds = activeTask.estDurationMins * 60;
+  if (activeTask && state.timer.status !== 'running') {
+    const durationMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+    const targetSeconds = durationMins * 60;
     state.timer.secondsLeft = targetSeconds;
     state.timer.totalSeconds = targetSeconds;
     state.timer.status = 'idle';
+    state.timer.lastInitializedTaskId = id;
     if (state.timer.intervalId) {
       clearInterval(state.timer.intervalId);
       state.timer.intervalId = null;
@@ -2133,8 +2221,53 @@ function downloadCSV() {
   document.body.removeChild(link);
 }
 
+function openSheetsSyncModal() {
+  const modal = document.getElementById('sheets-sync-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSheetsSyncModal() {
+  const modal = document.getElementById('sheets-sync-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function copyAppsScriptCode() {
+  const codeArea = document.getElementById('apps-script-code-area');
+  if (codeArea) {
+    codeArea.select();
+    navigator.clipboard.writeText(codeArea.value);
+    alert("📋 Google Apps Script code copied to clipboard! Open Google Sheets -> Extensions -> Apps Script and paste it.");
+  }
+}
+
+async function saveAndSyncGoogleSheets() {
+  const inputEl = document.getElementById('sheets-webhook-url-input');
+  if (inputEl) {
+    state.settings.webhookUrl = inputEl.value.trim();
+    saveSettings();
+  }
+
+  if (!state.settings.webhookUrl) {
+    alert("Please enter a valid Google Apps Script Web App URL.");
+    return;
+  }
+
+  await executeSheetsSync();
+}
+
 async function syncToGoogleSheets() {
-  if (!state.settings.webhookUrl) { alert("Please set your Google Apps Script Webhook URL in Settings first!"); return; }
+  if (!state.settings.webhookUrl) {
+    openSheetsSyncModal();
+    return;
+  }
+  await executeSheetsSync();
+}
+
+async function executeSheetsSync() {
+  if (state.logs.length === 0) {
+    alert("No log entries to sync. Complete tasks and log outcomes first!");
+    return;
+  }
 
   const payload = {
     date: state.selectedDate || TODAY_STR,
@@ -2152,7 +2285,8 @@ async function syncToGoogleSheets() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    alert("⚡ Full Daily Master Payload synced to Google Sheets successfully!");
+    alert("⚡ Master Data Log synced to Google Sheets successfully!");
+    closeSheetsSyncModal();
   } catch (err) {
     alert(`Sync failed: ${err.message}`);
   }
