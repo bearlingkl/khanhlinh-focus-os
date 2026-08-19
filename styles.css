@@ -327,3 +327,94 @@ body.mood-reflective .glass-card {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
 ::-webkit-scrollbar-thumb { background: #0284C7; border-radius: 3px; }
+
+/* Drag and Drop Task Card & Reordering Styling */
+.task-card-draggable {
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.task-card-draggable.dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+  border-style: dashed !important;
+  border-color: #0284C7 !important;
+  background-color: #E0F2FE !important;
+}
+.drag-handle {
+  cursor: grab;
+  color: #64748B;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem;
+  border-radius: 0.4rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.drag-handle:hover {
+  background: #E2E8F0;
+  color: #0284C7;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.reorder-btn {
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+  border-radius: 0.4rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.reorder-btn:hover:not(:disabled) {
+  background: #0284C7;
+  color: #FFFFFF;
+  border-color: #0284C7;
+}
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Overtime Timer Engine Styling */
+.timer-overtime-ring {
+  stroke: #F59E0B !important;
+  animation: overtimePulse 2s infinite ease-in-out;
+}
+.timer-overtime-text {
+  color: #D97706 !important;
+  animation: overtimeTextPulse 1.5s infinite alternate ease-in-out;
+}
+.overtime-badge {
+  background-color: #FEF3C7;
+  color: #B45309;
+  border: 1.5px solid #F59E0B;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  animation: overtimeBadgeGlow 2s infinite alternate;
+}
+
+@keyframes overtimePulse {
+  0% { stroke: #F59E0B; stroke-width: 8; }
+  50% { stroke: #EF4444; stroke-width: 10; }
+  100% { stroke: #F59E0B; stroke-width: 8; }
+}
+@keyframes overtimeTextPulse {
+  0% { color: #D97706; }
+  100% { color: #DC2626; }
+}
+@keyframes overtimeBadgeGlow {
+  0% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.4); }
+  100% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.6); }
+}
+

@@ -155,8 +155,13 @@ const state = {
     status: 'idle',
     secondsLeft: 25 * 60,
     totalSeconds: 25 * 60,
+    elapsedSecondsTotal: 0,
+    isOvertime: false,
+    overtimeSeconds: 0,
+    hasNotifiedZero: false,
     intervalId: null
   },
+  pendingOverlap: null,
   distraction: {
     isDisturbed: false,
     startTime: null,
@@ -802,6 +807,31 @@ function renderWorkspaceTab() {
       </div>
     </div>
 
+    <!-- MODAL: TIME CONFLICT / OVERLAP CONFIRMATION -->
+    <div id="overlap-modal" class="modal-backdrop hidden">
+      <div class="modal-card-bright w-full max-w-md p-6 space-y-4 border-2 border-amber-500">
+        <div class="flex items-center gap-2 border-b border-amber-200 pb-3">
+          <span class="text-2xl">⚠️</span>
+          <h3 class="font-extrabold text-base text-amber-800">Cảnh Báo Trùng Lịch Task</h3>
+        </div>
+        
+        <p id="overlap-modal-message" class="text-xs font-bold text-slate-900 leading-relaxed"></p>
+
+        <div class="bg-amber-50 p-3 rounded-xl border border-amber-300 text-xs space-y-1 font-bold text-amber-950">
+          <div id="overlap-modal-detail"></div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+          <button onclick="handleOverlapResponse(false)" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-xs font-bold text-slate-900">
+            Không, Giữ Nguyên Lịch
+          </button>
+          <button onclick="handleOverlapResponse(true)" class="btn-primary-blue text-xs">
+            ⚡ Có, Tự Động Lùi +<span id="overlap-shift-mins">30</span>p
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL: PET COMPANION SELECTOR -->
     <div id="pet-modal" class="modal-backdrop hidden">
       <div class="modal-card-bright w-full max-w-md p-6 space-y-4">
@@ -892,6 +922,8 @@ function renderWorkspaceTab() {
       <div class="modal-card-bright w-full max-w-md p-6 space-y-4">
         <h3 class="font-extrabold text-base text-sky-800">Post-Session Task Reflection</h3>
         <p class="text-xs text-slate-700 font-semibold">Log your completion percentage, outcome, and next steps before closing session.</p>
+        
+        <div id="outcome-time-summary" class="bg-sky-50 border border-sky-300 rounded-xl p-3 text-xs text-slate-900 space-y-1 font-bold"></div>
         
         <div>
           <label class="block text-xs font-bold mb-1 text-slate-900">Completion Percentage (%) (*)</label>
@@ -1196,31 +1228,44 @@ function renderSessionBlock(sessionKey, title, timeRange) {
           <div class="text-xs text-slate-500 font-bold py-3 text-center border-2 border-dashed border-sky-300 rounded-xl">
             No tasks planned for ${sessionKey}. Click '+ Add Task' to add your life/work tasks!
           </div>
-        ` : sessionTasks.map(t => renderTaskCard(t)).join('')}
+        ` : sessionTasks.map((t, idx) => renderTaskCard(t, idx, sessionTasks.length)).join('')}
       </div>
     </div>
   `;
 }
 
-function renderTaskCard(task) {
+function renderTaskCard(task, idx, totalInSession) {
   const isActive = task.id === state.activeTaskId;
   const priorityClass = task.priority === 'P1' ? 'badge-priority-p1' : (task.priority === 'P2' ? 'badge-priority-p2' : 'badge-priority-p3');
 
   return `
-    <div class="p-3.5 rounded-xl transition border-2 ${isActive ? 'bg-sky-100 border-sky-600 shadow-md ring-2 ring-sky-400' : 'bg-white border-slate-300 hover:border-sky-400'} flex flex-col md:flex-row md:items-center justify-between gap-3">
-      <div class="space-y-1.5 cursor-pointer flex-1" onclick="setActiveTask('${task.id}')">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="badge-area">${task.area} • ${task.project}</span>
-          <span class="${priorityClass}">${task.priority || 'P2'}</span>
-          ${task.cognitiveLoad ? `<span class="text-[11px] bg-slate-200 text-slate-900 px-2 py-0.5 rounded font-extrabold">${task.cognitiveLoad}</span>` : ''}
-          ${task.startTime ? `<span class="text-[11px] font-mono font-extrabold text-sky-800">⏱️ ${task.startTime} - ${task.endTime}</span>` : ''}
-          ${isActive ? '<span class="text-[10px] bg-sky-600 text-white font-extrabold px-2 py-0.5 rounded-full">ACTIVE</span>' : ''}
+    <div class="task-card-draggable p-3.5 rounded-xl transition border-2 ${isActive ? 'bg-sky-100 border-sky-600 shadow-md ring-2 ring-sky-400' : 'bg-white border-slate-300 hover:border-sky-400'} flex flex-col md:flex-row md:items-center justify-between gap-3"
+      draggable="true"
+      ondragstart="handleTaskDragStart(event, '${task.id}')"
+      ondragover="handleTaskDragOver(event)"
+      ondrop="handleTaskDrop(event, '${task.id}')"
+      ondragend="handleTaskDragEnd(event)">
+      
+      <div class="flex items-center gap-2 flex-1">
+        <span class="drag-handle" title="Kéo thả để di chuyển thứ tự task">⋮⋮</span>
+        <div class="space-y-1.5 cursor-pointer flex-1" onclick="setActiveTask('${task.id}')">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="badge-area">${task.area} • ${task.project}</span>
+            <span class="${priorityClass}">${task.priority || 'P2'}</span>
+            ${task.cognitiveLoad ? `<span class="text-[11px] bg-slate-200 text-slate-900 px-2 py-0.5 rounded font-extrabold">${task.cognitiveLoad}</span>` : ''}
+            ${task.startTime ? `<span class="text-[11px] font-mono font-extrabold text-sky-800">⏱️ ${task.startTime} - ${task.endTime}</span>` : ''}
+            ${isActive ? '<span class="text-[10px] bg-sky-600 text-white font-extrabold px-2 py-0.5 rounded-full">ACTIVE</span>' : ''}
+          </div>
+          <div class="font-extrabold text-sm text-slate-900">${task.name}</div>
+          ${task.goal ? `<div class="text-xs font-bold text-slate-700">🎯 Goal: ${task.goal}</div>` : ''}
         </div>
-        <div class="font-extrabold text-sm text-slate-900">${task.name}</div>
-        ${task.goal ? `<div class="text-xs font-bold text-slate-700">🎯 Goal: ${task.goal}</div>` : ''}
       </div>
 
       <div class="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 border-slate-200 pt-2 md:pt-0">
+        <div class="flex items-center gap-1">
+          <button onclick="event.stopPropagation(); moveTaskUpDown('${task.id}', 'up')" class="reorder-btn" title="Chuyển lên trên" ${idx === 0 ? 'disabled' : ''}>▲</button>
+          <button onclick="event.stopPropagation(); moveTaskUpDown('${task.id}', 'down')" class="reorder-btn" title="Chuyển xuống dưới" ${idx === totalInSession - 1 ? 'disabled' : ''}>▼</button>
+        </div>
         <div class="text-xs font-mono font-extrabold text-sky-900">${task.pomsDone}/${task.pomsCount} Poms</div>
         <div class="flex items-center gap-1.5">
           <button onclick="openOutcomeModal('${task.id}')" class="text-xs px-2.5 py-1 bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg font-bold shadow-sm" title="Log Outcome">
@@ -1640,7 +1685,7 @@ function renderAnalyticsTab() {
   `;
 }
 
-// TIMER ENGINE WITH +10m EXTENSION
+// TIMER ENGINE WITH CONTINUOUS OVERTIME & TOTAL DURATION TRACKING
 function startTimer() {
   if (state.timer.status === 'running') return;
   state.timer.status = 'running';
@@ -1654,17 +1699,27 @@ function startTimer() {
     const delta = Math.floor((now - (state.timer.lastTickTimestamp || now)) / 1000);
     state.timer.lastTickTimestamp = now;
 
-    const decrement = delta > 0 ? delta : 1;
-    if (state.timer.secondsLeft > 0) {
-      state.timer.secondsLeft = Math.max(0, state.timer.secondsLeft - decrement);
-      updateTimerDisplay();
-      if (state.pipWindow) updatePipTimerDisplay();
-      if (state.timer.secondsLeft === 0) {
-        onTimerComplete();
+    const increment = delta > 0 ? delta : 1;
+    state.timer.elapsedSecondsTotal = (state.timer.elapsedSecondsTotal || 0) + increment;
+
+    if (state.timer.elapsedSecondsTotal >= state.timer.totalSeconds) {
+      state.timer.isOvertime = true;
+      state.timer.overtimeSeconds = state.timer.elapsedSecondsTotal - state.timer.totalSeconds;
+      state.timer.secondsLeft = 0;
+
+      if (!state.timer.hasNotifiedZero) {
+        state.timer.hasNotifiedZero = true;
+        audioManager.startSound('cafe');
+        setTimeout(() => audioManager.stopSound('cafe'), 1500);
       }
     } else {
-      onTimerComplete();
+      state.timer.isOvertime = false;
+      state.timer.overtimeSeconds = 0;
+      state.timer.secondsLeft = state.timer.totalSeconds - state.timer.elapsedSecondsTotal;
     }
+
+    updateTimerDisplay();
+    if (state.pipWindow) updatePipTimerDisplay();
   }, 1000);
 
   renderTabContent();
@@ -1679,8 +1734,16 @@ function pauseTimer() {
 
 function resetTimer() {
   pauseTimer();
-  state.timer.secondsLeft = state.settings.workDuration * 60;
-  state.timer.totalSeconds = state.settings.workDuration * 60;
+  state.timer.elapsedSecondsTotal = 0;
+  state.timer.isOvertime = false;
+  state.timer.overtimeSeconds = 0;
+  state.timer.hasNotifiedZero = false;
+  
+  const activeTask = state.tasks.find(t => t.id === state.activeTaskId);
+  const durationMins = activeTask ? (activeTask.estDurationMins || activeTask.durationPlannedMin || 25) : (state.settings.workDuration || 25);
+  state.timer.secondsLeft = durationMins * 60;
+  state.timer.totalSeconds = durationMins * 60;
+
   updateTimerDisplay();
   if (state.pipWindow) updatePipTimerDisplay();
   renderTabContent();
@@ -1688,8 +1751,11 @@ function resetTimer() {
 
 function addTimerMinutes(mins) {
   const addedSecs = mins * 60;
-  state.timer.secondsLeft += addedSecs;
   state.timer.totalSeconds += addedSecs;
+  if (state.timer.elapsedSecondsTotal < state.timer.totalSeconds) {
+    state.timer.isOvertime = false;
+    state.timer.secondsLeft = state.timer.totalSeconds - state.timer.elapsedSecondsTotal;
+  }
 
   updateTimerDisplay();
   if (state.pipWindow) updatePipTimerDisplay();
@@ -1702,17 +1768,13 @@ function finishTaskEarly() {
 
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId);
   if (activeTask) {
-    const elapsedNow = Math.round(((state.timer.totalSeconds || 0) - (state.timer.secondsLeft || 0)) / 60);
-    if (elapsedNow > 0) {
-      activeTask.accumulatedFocusMins = (activeTask.accumulatedFocusMins || 0) + elapsedNow;
-    }
     if (!activeTask.pomsDone || activeTask.pomsDone === 0) {
       activeTask.pomsDone = 1;
     }
     saveTasks();
     openOutcomeModal(activeTask.id);
   } else {
-    alert("🎉 Task finished early! Great job!");
+    alert("🎉 Task finished! Great job!");
   }
 }
 
@@ -1723,21 +1785,17 @@ function onTimerComplete() {
   const activeTask = state.tasks.find(t => t.id === state.activeTaskId);
   if (activeTask) {
     activeTask.pomsDone = (activeTask.pomsDone || 0) + 1;
-    const sessionMins = Math.round((state.timer.totalSeconds || ((activeTask.estDurationMins || 25) * 60)) / 60);
-    activeTask.accumulatedFocusMins = (activeTask.accumulatedFocusMins || 0) + sessionMins;
     saveTasks();
 
     const assignedPoms = activeTask.pomsCount || activeTask.poms || activeTask.assignedPoms || activeTask.pomsPlanned || 1;
     
     if (activeTask.pomsDone >= assignedPoms) {
-      alert(`🎉 Excellent! You completed all ${activeTask.pomsDone} Pomodoros (${activeTask.accumulatedFocusMins} mins total focus) for this task!`);
       openOutcomeModal(activeTask.id);
     } else {
       alert(`🎉 Pomodoro ${activeTask.pomsDone}/${assignedPoms} Completed! (+50 XP). Great focus, Khanh Linh. Take a short break then continue!`);
       resetTimer();
     }
   } else {
-    alert("🎉 Pomodoro Session Completed! Great focus, Khanh Linh.");
     resetTimer();
   }
 }
@@ -1746,15 +1804,29 @@ function updateTimerDisplay() {
   const digitsEl = document.getElementById('timer-digits');
   const ringEl = document.getElementById('timer-progress-circle');
 
-  if (digitsEl) digitsEl.textContent = formatTime(state.timer.secondsLeft);
+  if (digitsEl) {
+    if (state.timer.isOvertime) {
+      digitsEl.textContent = `+${formatTime(state.timer.overtimeSeconds)}`;
+      digitsEl.classList.add('timer-overtime-text');
+    } else {
+      digitsEl.textContent = formatTime(state.timer.secondsLeft);
+      digitsEl.classList.remove('timer-overtime-text');
+    }
+  }
   
   if (ringEl) {
-    const total = state.timer.totalSeconds;
-    const current = state.timer.secondsLeft;
-    const pct = total > 0 ? current / total : 0;
-    const circumference = 263.89;
-    const offset = circumference * (1 - pct);
-    ringEl.style.strokeDashoffset = offset;
+    if (state.timer.isOvertime) {
+      ringEl.classList.add('timer-overtime-ring');
+      ringEl.style.strokeDashoffset = 0;
+    } else {
+      ringEl.classList.remove('timer-overtime-ring');
+      const total = state.timer.totalSeconds;
+      const current = state.timer.secondsLeft;
+      const pct = total > 0 ? current / total : 0;
+      const circumference = 263.89;
+      const offset = circumference * (1 - pct);
+      ringEl.style.strokeDashoffset = offset;
+    }
   }
 }
 
@@ -2157,6 +2229,39 @@ function openEditTaskModal(taskId) {
   document.getElementById('task-modal').classList.remove('hidden');
 }
 
+// TIME UTILITIES FOR OVERLAP & SHIFT CALCULATIONS
+function timeToMins(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minsToTime(totalMins) {
+  const normalizedMins = ((totalMins % 1440) + 1440) % 1440;
+  const h = Math.floor(normalizedMins / 60).toString().padStart(2, '0');
+  const m = Math.floor(normalizedMins % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function findTaskOverlaps(targetTask) {
+  const targetDate = targetTask.date || state.selectedDate || TODAY_STR;
+  const sameDateTasks = state.tasks.filter(t => t.id !== targetTask.id && (t.date || TODAY_STR) === targetDate);
+  
+  if (!targetTask.startTime || !targetTask.endTime) return [];
+
+  const targetStart = timeToMins(targetTask.startTime);
+  const targetEnd = timeToMins(targetTask.endTime);
+
+  const conflicts = sameDateTasks.filter(t => {
+    if (!t.startTime || !t.endTime) return false;
+    const tStart = timeToMins(t.startTime);
+    const tEnd = timeToMins(t.endTime);
+    return tStart < targetEnd && tEnd > targetStart;
+  });
+
+  return conflicts;
+}
+
 function saveTaskModal() {
   const id = document.getElementById('modal-task-id').value;
   const area = document.getElementById('modal-area-select').value;
@@ -2177,31 +2282,152 @@ function saveTaskModal() {
   if (!state.autocompleteHistory.tasks.includes(name)) state.autocompleteHistory.tasks.push(name);
   localStorage.setItem('ruoc_autocomplete', JSON.stringify(state.autocompleteHistory));
 
+  let savedTask = null;
   if (id) {
-    const task = state.tasks.find(t => t.id === id);
-    if (task) {
-      task.area = area; task.project = project; task.name = name;
-      task.session = session; task.priority = priority; task.cognitiveLoad = cognitiveLoad;
-      task.pomsCount = pomsCount; task.estDurationMins = estDurationMins;
-      task.startTime = startTime; task.endTime = endTime;
-      task.goal = goal; task.refLinks = refLinks; task.details = details;
+    savedTask = state.tasks.find(t => t.id === id);
+    if (savedTask) {
+      savedTask.area = area; savedTask.project = project; savedTask.name = name;
+      savedTask.session = session; savedTask.priority = priority; savedTask.cognitiveLoad = cognitiveLoad;
+      savedTask.pomsCount = pomsCount; savedTask.estDurationMins = estDurationMins;
+      savedTask.startTime = startTime; savedTask.endTime = endTime;
+      savedTask.goal = goal; savedTask.refLinks = refLinks; savedTask.details = details;
     }
   } else {
-    const newTask = {
+    savedTask = {
       id: 'task-' + Date.now(),
       date: state.selectedDate || TODAY_STR,
       name, area, project, session, priority, cognitiveLoad, pomsCount, pomsDone: 0,
       estDurationMins, startTime, endTime, goal, refLinks, details,
       outcome: '', nextSteps: '', completionPct: 0, outputLinks: ''
     };
-    state.tasks.push(newTask);
-    state.activeTaskId = newTask.id;
+    state.tasks.push(savedTask);
+    state.activeTaskId = savedTask.id;
   }
 
-  autoShiftAndSortTasks();
+  // Check for time conflicts / overlaps
+  const conflicts = findTaskOverlaps(savedTask);
+  if (conflicts.length > 0) {
+    const firstConflict = conflicts[0];
+    const conflictStartMins = timeToMins(firstConflict.startTime);
+    const targetEndMins = timeToMins(savedTask.endTime);
+    const shiftMins = Math.max(10, targetEndMins - conflictStartMins);
+
+    state.pendingOverlap = {
+      savedTask,
+      conflicts,
+      shiftMins
+    };
+
+    // Open Overlap Modal with clear Vietnamese message
+    const msgEl = document.getElementById('overlap-modal-message');
+    const detailEl = document.getElementById('overlap-modal-detail');
+    const shiftEl = document.getElementById('overlap-shift-mins');
+
+    if (msgEl) {
+      msgEl.innerHTML = `
+        Task mới <b>"${savedTask.name}"</b> (${savedTask.startTime} - ${savedTask.endTime}) đang bị trùng thời gian với task <b>"${firstConflict.name}"</b> (${firstConflict.startTime} - ${firstConflict.endTime}).
+      `;
+    }
+    if (detailEl) {
+      detailEl.innerHTML = `
+        👉 <b>Đề xuất tự động lùi:</b> Lùi task <b>"${firstConflict.name}"</b> (và các task phía sau) xuống <b>${shiftMins} phút</b>, bắt đầu từ <b>${savedTask.endTime}</b> đến <b>${minsToTime(timeToMins(firstConflict.endTime) + shiftMins)}</b>.
+      `;
+    }
+    if (shiftEl) shiftEl.textContent = shiftMins;
+
+    document.getElementById('overlap-modal').classList.remove('hidden');
+    closeTaskModal();
+    return;
+  }
+
+  saveTasks();
   if (state.activeTaskId) setActiveTask(state.activeTaskId);
   closeTaskModal();
   renderTabContent();
+}
+
+function handleOverlapResponse(shouldShift) {
+  const modal = document.getElementById('overlap-modal');
+  if (modal) modal.classList.add('hidden');
+
+  if (shouldShift && state.pendingOverlap) {
+    const { savedTask, conflicts, shiftMins } = state.pendingOverlap;
+    
+    conflicts.forEach(conflictTask => {
+      const oldStartMins = timeToMins(conflictTask.startTime);
+      const oldEndMins = timeToMins(conflictTask.endTime);
+      
+      conflictTask.startTime = minsToTime(oldStartMins + shiftMins);
+      conflictTask.endTime = minsToTime(oldEndMins + shiftMins);
+    });
+
+    // Cascade shift to subsequent overlapping tasks
+    for (let i = 0; i < state.tasks.length - 1; i++) {
+      const current = state.tasks[i];
+      const next = state.tasks[i + 1];
+      if (current.endTime && next.startTime && current.endTime > next.startTime) {
+        const nextDuration = next.estDurationMins || 30;
+        next.startTime = current.endTime;
+        next.endTime = minsToTime(timeToMins(next.startTime) + nextDuration);
+      }
+    }
+  }
+
+  state.pendingOverlap = null;
+  saveTasks();
+  if (state.activeTaskId) setActiveTask(state.activeTaskId);
+  renderTabContent();
+}
+
+// TASK REORDERING & DRAG-AND-DROP HANDLERS
+function moveTaskUpDown(taskId, direction) {
+  const idx = state.tasks.findIndex(t => t.id === taskId);
+  if (idx === -1) return;
+
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= state.tasks.length) return;
+
+  // Swap task positions in array
+  const temp = state.tasks[idx];
+  state.tasks[idx] = state.tasks[targetIdx];
+  state.tasks[targetIdx] = temp;
+
+  saveTasks();
+  renderTabContent();
+}
+
+let draggedTaskId = null;
+
+function handleTaskDragStart(e, taskId) {
+  draggedTaskId = taskId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', taskId);
+  e.currentTarget.classList.add('dragging');
+}
+
+function handleTaskDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handleTaskDrop(e, targetTaskId) {
+  e.preventDefault();
+  if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+
+  const srcIdx = state.tasks.findIndex(t => t.id === draggedTaskId);
+  const destIdx = state.tasks.findIndex(t => t.id === targetTaskId);
+
+  if (srcIdx !== -1 && destIdx !== -1) {
+    const [draggedTask] = state.tasks.splice(srcIdx, 1);
+    state.tasks.splice(destIdx, 0, draggedTask);
+    saveTasks();
+    renderTabContent();
+  }
+}
+
+function handleTaskDragEnd(e) {
+  draggedTaskId = null;
+  document.querySelectorAll('.task-card-draggable').forEach(el => el.classList.remove('dragging'));
 }
 
 function closeTaskModal() {
@@ -2223,6 +2449,23 @@ function openOutcomeModal(taskId) {
     document.getElementById('outcome-desc-input').value = task.outcome || '';
     document.getElementById('outcome-next-input').value = task.nextSteps || '';
     document.getElementById('outcome-links-input').value = task.outputLinks || '';
+
+    // Calculate actual elapsed focus duration
+    const plannedMins = task.estDurationMins || task.durationPlannedMin || 25;
+    const elapsedFromTimer = Math.round((state.timer.elapsedSecondsTotal || 0) / 60);
+    const actualMins = (elapsedFromTimer > 0) ? elapsedFromTimer : plannedMins;
+    const overtimeMins = Math.max(0, actualMins - plannedMins);
+
+    const summaryEl = document.getElementById('outcome-time-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="flex justify-between items-center">
+          <span>⏱️ <b>Tổng thời gian Focus thực tế:</b> <span class="font-mono text-sky-800 text-sm font-extrabold">${actualMins} phút</span></span>
+          <span class="text-slate-600">Dự kiến: ${plannedMins}m</span>
+        </div>
+        ${overtimeMins > 0 ? `<div class="mt-1 text-amber-700 font-extrabold text-[11px]">⚠️ Quá giờ (Overtime): +${overtimeMins} phút (Timer đã đếm liên tục cho đến khi Finish)</div>` : ''}
+      `;
+    }
   }
   document.getElementById('outcome-modal').classList.remove('hidden');
 }
@@ -2241,14 +2484,10 @@ function saveOutcomeModal() {
   activeTask.nextSteps = next;
   activeTask.outputLinks = outputLinks;
 
-  // Calculate REAL TOTAL focus minutes across all completed/assigned Pomodoros!
-  const singlePomMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
-  const pomsCount = Math.max(1, activeTask.pomsCount || activeTask.pomsDone || activeTask.poms || activeTask.assignedPoms || activeTask.pomsPlanned || 1);
-  const elapsedFromTimer = Math.round(((state.timer.totalSeconds || 0) - (state.timer.secondsLeft || 0)) / 60);
-
-  const actualFocusMinutes = (activeTask.accumulatedFocusMins && activeTask.accumulatedFocusMins > 0)
-    ? activeTask.accumulatedFocusMins + (state.timer.status === 'running' ? elapsedFromTimer : 0)
-    : (pomsCount * singlePomMins);
+  // Calculate REAL TOTAL focus minutes from timer's elapsedSecondsTotal!
+  const plannedMins = activeTask.estDurationMins || activeTask.durationPlannedMin || 25;
+  const elapsedFromTimer = Math.round((state.timer.elapsedSecondsTotal || 0) / 60);
+  const actualFocusMinutes = (elapsedFromTimer > 0) ? elapsedFromTimer : plannedMins;
 
   state.logs.push({
     id: 'log-' + Date.now(),
@@ -2272,20 +2511,9 @@ function saveOutcomeModal() {
   const remainingTask = state.tasks[0] || null;
   state.activeTaskId = remainingTask ? remainingTask.id : null;
 
+  resetTimer();
   if (remainingTask) {
-    const durationMins = remainingTask.estDurationMins || remainingTask.durationPlannedMin || 25;
-    const targetSeconds = durationMins * 60;
-    state.timer.secondsLeft = targetSeconds;
-    state.timer.totalSeconds = targetSeconds;
-    state.timer.lastInitializedTaskId = remainingTask.id;
-  } else {
-    state.timer.secondsLeft = state.settings.workDuration * 60;
-    state.timer.totalSeconds = state.settings.workDuration * 60;
-  }
-  state.timer.status = 'idle';
-  if (state.timer.intervalId) {
-    clearInterval(state.timer.intervalId);
-    state.timer.intervalId = null;
+    setActiveTask(remainingTask.id);
   }
 
   saveTasks();
